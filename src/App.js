@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { ThemeProvider } from "theme-ui";
 import { Box, Text, Flex, Button } from "rebass";
 import { Label, Input, Checkbox } from "@rebass/forms";
+import QRCode from "react-qr-code";
 import theme from "./theme";
 
 const SOCKET_SERVER =
@@ -179,7 +180,7 @@ function Watch() {
         const mediaStream = event.streams[0];
         setPlaying(true);
         videoElem.current.srcObject = mediaStream;
-        setTimeout(() => videoElem.current.play(), 500);
+        setTimeout(() => videoElem.current.play(), 1000);
       };
       peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
@@ -303,6 +304,9 @@ function Broadcast() {
                 document.execCommand("copy");
               }}
             />
+          </Box>
+          <Box m={20}>
+            <QRCode value={BASE_URL + "/watch/" + room} />
           </Box>
           <Button
             bg={"#ef0f0f"}
