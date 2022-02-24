@@ -17,9 +17,18 @@ const genRandomID = () => {
 
 const rooms = {};
 
+app.use((req, res, next) => {
+  if (
+    process.env.NODE_ENV == "production" &&
+    req.headers["x-forwarded-proto"] != "https"
+  ) {
+    res.redirect("https://" + req.headers.host + req.originalUrl);
+  } else {
+    next();
+  }
+});
 app.use(express.static(__dirname + "/build"));
 app.use((req, res, next) => {
-  console.log(req.pathname);
   return res.sendFile("./index.html", { root: __dirname + "/build" });
 });
 
@@ -36,10 +45,13 @@ io.sockets.on("connection", (socket) => {
   });
   socket.on("watch", (newRoomID) => {
     roomID = newRoomID;
+    console.log("watch", roomID);
     if (!rooms[roomID]) {
       socket.emit("exit");
+      return;
     }
     socket.to(rooms[roomID].sharerSocketID).emit("watch", socket.id);
+    console.log("watching", rooms[roomID], roomID);
     rooms[roomID].watchers.add(socket.id);
   });
   socket.on("stop", () => {

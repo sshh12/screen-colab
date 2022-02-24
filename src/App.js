@@ -1,6 +1,6 @@
 import "./App.css";
 import io from "socket.io-client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { ThemeProvider } from "theme-ui";
 import { Box, Text, Flex, Button } from "rebass";
 import { Label, Input, Checkbox } from "@rebass/forms";
@@ -155,6 +155,7 @@ function Watch() {
     window.innerHeight,
   ]);
   const [playing, setPlaying] = useState(false);
+  const videoElem = useRef(null);
   let startWatching = async () => {
     const roomID = window.location.pathname.split("/")[2];
     const socket = io.connect(SOCKET_SERVER);
@@ -177,7 +178,7 @@ function Watch() {
       peerConnection.ontrack = (event) => {
         const mediaStream = event.streams[0];
         setPlaying(true);
-        document.querySelector("video").srcObject = mediaStream;
+        videoElem.current.srcObject = mediaStream;
       };
       peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
@@ -193,19 +194,19 @@ function Watch() {
   };
   useEffect(() => {
     startWatching();
-  }, []);
-  useEffect(() => {
     const onWinResize = () => {
       setWinSize([window.innerWidth, window.innerHeight]);
     };
     window.addEventListener("resize", onWinResize);
-  });
+  }, []);
   return (
     <div>
       <video
+        controls
+        ref={videoElem}
         style={{
           maxWidth: winSize[0] + "px",
-          maxHeight: winSize[0] + "px",
+          maxHeight: winSize[1] + "px",
           display: playing ? "block" : "none",
         }}
         playsInline
