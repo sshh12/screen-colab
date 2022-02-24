@@ -8,7 +8,7 @@ import theme from "./theme";
 
 const SOCKET_SERVER =
   window.location.hostname === "localhost"
-    ? "http://" + window.location.hostname + ":4000"
+    ? "http://" + window.location.hostname + ":5000"
     : window.location.origin;
 const BASE_URL = window.location.origin;
 const RTC_CONFIG = {
@@ -162,6 +162,9 @@ function Watch() {
     socket.on("connect", () => {
       socket.emit("watch", roomID);
     });
+    socket.on("exit", () => {
+      window.location.href = "/";
+    });
     socket.on("rtc:offer", (id, description) => {
       peerConnection = new RTCPeerConnection(RTC_CONFIG);
       peerConnection
@@ -207,7 +210,6 @@ function Watch() {
         }}
         playsInline
         autoPlay
-        muted
       ></video>
       {!playing && (
         <Text fontSize={"1.5em"} mt={20}>
@@ -270,13 +272,20 @@ function Broadcast() {
         peerConnections[id].close();
         delete peerConnections[id];
       });
+      window.runOnExit = () => {
+        socket.emit("stop");
+        socket.close();
+      };
+      window.onunload = window.onbeforeunload = () => {
+        window.runOnExit();
+      };
     });
   }, []);
   return (
     <div>
       {room && (
         <Box mt={25}>
-          <Text fontWeight={600} fontSize={"2em"}>
+          <Text fontWeight={600} fontSize={"2em"} letterSpacing={"0.6rem"}>
             {room}
           </Text>
           <Box mt={25} textAlign={"center"}>
@@ -293,10 +302,15 @@ function Broadcast() {
               }}
             />
           </Box>
-          <Button bg={"#ef0f0f"} mt={20}>
-            <a style={{ textDecoration: "none", color: "#fff" }} href={`/`}>
-              STOP
-            </a>
+          <Button
+            bg={"#ef0f0f"}
+            mt={20}
+            onClick={() => {
+              window.runOnExit();
+              setTimeout(() => (window.location.href = "/"), 100);
+            }}
+          >
+            STOP
           </Button>
         </Box>
       )}
