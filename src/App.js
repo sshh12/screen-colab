@@ -179,6 +179,7 @@ function Watch() {
         const mediaStream = event.streams[0];
         setPlaying(true);
         videoElem.current.srcObject = mediaStream;
+        setTimeout(() => videoElem.current.play(), 500);
       };
       peerConnection.onicecandidate = (event) => {
         if (event.candidate) {

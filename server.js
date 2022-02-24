@@ -51,7 +51,6 @@ io.sockets.on("connection", (socket) => {
       return;
     }
     socket.to(rooms[roomID].sharerSocketID).emit("watch", socket.id);
-    console.log("watching", rooms[roomID], roomID);
     rooms[roomID].watchers.add(socket.id);
   });
   socket.on("stop", () => {
@@ -80,4 +79,4 @@ io.sockets.on("connection", (socket) => {
     }
   });
 });
-server.listen(port, () => console.log(`Server is running on port ${port}`));
+server.listen(port, () => console.log(`server.listen(${port})`));
