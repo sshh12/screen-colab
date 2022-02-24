@@ -6,7 +6,10 @@ import { Box, Text, Flex, Button } from "rebass";
 import { Label, Input, Checkbox } from "@rebass/forms";
 import theme from "./theme";
 
-const SOCKET_SERVER = "http://" + window.location.hostname + ":4000";
+const SOCKET_SERVER =
+  window.location.hostname === "localhost"
+    ? "http://" + window.location.hostname + ":4000"
+    : window.location.origin;
 const BASE_URL = window.location.origin;
 const RTC_CONFIG = {
   iceServers: [
@@ -217,12 +220,6 @@ function Watch() {
 
 function Broadcast() {
   const [room, setRoom] = useState("");
-  const displayMediaOptions = {
-    video: {
-      cursor: "always",
-    },
-    audio: true,
-  };
   const startStream = async (options) => {
     let captureStream = null;
     try {
