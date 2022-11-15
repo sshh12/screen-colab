@@ -16,8 +16,6 @@
     "react-qr-code": "^2.0.3",
     "react-scripts": "5.0.0",
     "rebass": "^4.0.7",
-    "socket.io": "^4.4.1",
-    "socket.io-client": "^4.4.1",
     "theme-ui": "^0.13.1",
     "web-vitals": "^2.1.4"
   },

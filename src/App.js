@@ -1,17 +1,12 @@
 import "./App.css";
-import io from "socket.io-client";
 import React, { useEffect, useState, useRef } from "react";
 import { ThemeProvider } from "theme-ui";
 import { Box, Text, Flex, Button } from "rebass";
 import { Label, Input, Checkbox } from "@rebass/forms";
+import * as Ably from "ably/promises";
 import QRCode from "react-qr-code";
 import theme from "./theme";
 
-const SOCKET_SERVER =
-  window.location.hostname === "localhost"
-    ? "http://" + window.location.hostname + ":5000"
-    : window.location.origin;
-const BASE_URL = window.location.origin;
 const RTC_CONFIG = {
   iceServers: [
     {
@@ -19,8 +14,27 @@ const RTC_CONFIG = {
     },
   ],
 };
+const BASE_URL = window.location.origin;
+const API_URL = "https://sc.sshh.io";
+
+const genRandomID = () => {
+  const vocab = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let result = "";
+  for (var i = 0; i < 6; i++) {
+    result += vocab.charAt(Math.floor(Math.random() * vocab.length));
+  }
+  return result;
+};
 
 function App() {
+  let [ably, setAbly] = useState(null);
+  useEffect(() => {
+    const clientId = genRandomID();
+    const ably = new Ably.Realtime.Promise({
+      authUrl: `${API_URL}/api/token-request?clientId=${clientId}`,
+    });
+    setAbly(ably);
+  }, []);
   let Page;
   let showNav = true;
   if (window.location.pathname.startsWith("/share")) {
@@ -43,7 +57,7 @@ function App() {
             </Text>
           </Flex>
         )}
-        <Page />
+        <Page ably={ably} />
       </div>
     </ThemeProvider>
   );
@@ -55,11 +69,20 @@ function Landing() {
   const [roomID, setRoomID] = useState("");
   const [showCursor, setShowCursor] = useState(true);
   const [captureAudio, setCaptureAudio] = useState(false);
+  const [channelId, setChannelId] = useState(null);
+  useEffect(() => {
+    setChannelId(genRandomID());
+  }, []);
   const shareStreamOpts = {
-    video: {
-      cursor: showCursor ? "always" : "never",
+    mediaOpts: {
+      video: {
+        cursor: showCursor ? "always" : "never",
+      },
+      audio: captureAudio,
     },
-    audio: captureAudio,
+    streamOpts: {
+      channelId: channelId,
+    },
   };
   return (
     <Box mt={60}>
@@ -159,57 +182,72 @@ function Landing() {
   );
 }
 
-function Watch() {
+function Watch({ ably }) {
   const [winSize, setWinSize] = useState([
     window.innerWidth,
     window.innerHeight,
   ]);
   const [playing, setPlaying] = useState(false);
+  const [watchId, setWatchId] = useState(null);
   const videoElem = useRef(null);
-  let startWatching = async () => {
-    const roomID = window.location.pathname.split("/")[2];
-    const socket = io.connect(SOCKET_SERVER);
-    let peerConnection;
-    socket.on("connect", () => {
-      socket.emit("watch", roomID);
-    });
-    socket.on("exit", () => {
-      window.location.href = "/";
-    });
-    socket.on("rtc:offer", (id, description) => {
-      peerConnection = new RTCPeerConnection(RTC_CONFIG);
-      peerConnection
-        .setRemoteDescription(description)
-        .then(() => peerConnection.createAnswer())
-        .then((sdp) => peerConnection.setLocalDescription(sdp))
-        .then(() => {
-          socket.emit("rtc:answer", id, peerConnection.localDescription);
-        });
-      peerConnection.ontrack = (event) => {
-        const mediaStream = event.streams[0];
-        setPlaying(true);
-        videoElem.current.srcObject = mediaStream;
-        setTimeout(() => videoElem.current.play(), 1000);
-      };
-      peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          socket.emit("rtc:candidate", id, event.candidate);
-        }
-      };
-    });
-    socket.on("rtc:candidate", (id, candidate) => {
-      peerConnection
-        .addIceCandidate(new RTCIceCandidate(candidate))
-        .catch((e) => console.error(e));
-    });
-  };
   useEffect(() => {
+    let startWatching = async () => {
+      if (!ably) {
+        return;
+      }
+      setWatchId(genRandomID());
+      const channelID = window.location.pathname.split("/")[2];
+      const channel = ably.channels.get(`channel:${channelID}`);
+      channel.publish("watch", { watchId: watchId });
+      let peerConnection;
+      channel.subscribe("rtc:candidate", ({ data }) => {
+        if (data.watchId !== watchId) {
+          return;
+        }
+        peerConnection
+          .addIceCandidate(new RTCIceCandidate(data.candidate))
+          .catch((e) => console.error(e));
+      });
+      channel.subscribe("rtc:offer", ({ data }) => {
+        if (data.watchId !== watchId) {
+          return;
+        }
+        peerConnection = new RTCPeerConnection(RTC_CONFIG);
+        peerConnection
+          .setRemoteDescription(data.offer)
+          .then(() => peerConnection.createAnswer())
+          .then((sdp) => peerConnection.setLocalDescription(sdp))
+          .then(() => {
+            channel.publish("rtc:answer", {
+              watchId: watchId,
+              answer: peerConnection.localDescription,
+            });
+          });
+        peerConnection.ontrack = (event) => {
+          const mediaStream = event.streams[0];
+          setPlaying(true);
+          videoElem.current.srcObject = mediaStream;
+          setTimeout(() => videoElem.current.play(), 1000);
+        };
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate) {
+            channel.publish("rtc:candidate2", {
+              watchId: watchId,
+              candidate: event.candidate,
+            });
+          }
+        };
+      });
+      channel.subscribe("exit", () => {
+        window.location.href = "/";
+      });
+    };
     startWatching();
     const onWinResize = () => {
       setWinSize([window.innerWidth, window.innerHeight]);
     };
     window.addEventListener("resize", onWinResize);
-  }, []);
+  }, [ably]);
   return (
     <div>
       <video
@@ -232,8 +270,8 @@ function Watch() {
   );
 }
 
-function Broadcast() {
-  const [room, setRoom] = useState("");
+function Broadcast({ ably }) {
+  const [channel, setChannel] = useState(null);
   const startStream = async (options) => {
     let captureStream = null;
     try {
@@ -244,67 +282,66 @@ function Broadcast() {
     return captureStream;
   };
   useEffect(() => {
-    const displayMediaOptions = JSON.parse(
+    if (!ably) {
+      return;
+    }
+    const { mediaOpts, streamOpts } = JSON.parse(
       decodeURIComponent(window.location.search.replace("?o=", ""))
     );
-    startStream(displayMediaOptions).then((stream) => {
-      const socket = io.connect(SOCKET_SERVER);
+    setChannel(streamOpts.channelId);
+    startStream(mediaOpts).then((stream) => {
+      const channel = ably.channels.get(`channel:${streamOpts.channelId}`);
       const peerConnections = {};
-      socket.on("connect", () => {
-        socket.emit("share");
-      });
-      socket.on("roomID", (roomID) => {
-        setRoom(roomID);
-      });
-      socket.on("rtc:answer", (id, description) => {
-        peerConnections[id].setRemoteDescription(description);
-      });
-      socket.on("watch", (id) => {
+      channel.subscribe("watch", ({ data }) => {
         const peerConnection = new RTCPeerConnection(RTC_CONFIG);
-        peerConnections[id] = peerConnection;
+        peerConnections[data.watchId] = peerConnection;
         stream
           .getTracks()
           .forEach((track) => peerConnection.addTrack(track, stream));
         peerConnection.onicecandidate = (event) => {
           if (event.candidate) {
-            socket.emit("rtc:candidate", id, event.candidate);
+            channel.publish("rtc:candidate", {
+              watchId: data.watchId,
+              candidate: event.candidate,
+            });
           }
         };
         peerConnection
           .createOffer()
           .then((sdp) => peerConnection.setLocalDescription(sdp))
           .then(() => {
-            socket.emit("rtc:offer", id, peerConnection.localDescription);
+            channel.publish("rtc:offer", {
+              watchId: data.watchId,
+              offer: peerConnection.localDescription,
+            });
           });
       });
-      socket.on("rtc:candidate", (id, candidate) => {
-        peerConnections[id].addIceCandidate(new RTCIceCandidate(candidate));
+      channel.subscribe("rtc:answer", ({ data }) => {
+        peerConnections[data.watchId].setRemoteDescription(data.answer);
       });
-      socket.on("rtc:disconnect", (id) => {
-        peerConnections[id].close();
-        delete peerConnections[id];
+      channel.subscribe("rtc:candidate2", ({ data }) => {
+        peerConnections[data.watchId].addIceCandidate(
+          new RTCIceCandidate(data.candidate)
+        );
       });
       window.runOnExit = () => {
-        socket.emit("stop");
-        socket.close();
-      };
-      window.onunload = window.onbeforeunload = () => {
-        window.runOnExit();
+        channel.publish("exit", {});
+        channel.detach();
       };
     });
-  }, []);
+  }, [ably]);
   return (
     <div>
-      {room && (
+      {channel && (
         <Box mt={25}>
           <Text fontWeight={600} fontSize={"2em"} letterSpacing={"0.6rem"}>
-            {room}
+            {channel}
           </Text>
           <Box mt={25} textAlign={"center"}>
             <Input
-              value={BASE_URL + "/watch/" + room}
-              id="room-link"
-              name="room-link"
+              value={BASE_URL + "/watch/" + channel}
+              id="channel-link"
+              name="channel-link"
               type="text"
               maxWidth={"300px"}
               margin={"auto"}
@@ -315,7 +352,7 @@ function Broadcast() {
             />
           </Box>
           <Box m={20}>
-            <QRCode value={BASE_URL + "/watch/" + room} />
+            <QRCode value={BASE_URL + "/watch/" + channel} />
           </Box>
           <Button
             bg={"#ef0f0f"}
