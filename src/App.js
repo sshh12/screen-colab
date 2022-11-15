@@ -65,11 +65,20 @@ function Landing() {
     <Box mt={60}>
       {!(showViewSettings || showShareSettings) && (
         <div>
-          <Button bg={"#33e"} onClick={() => setShowShareSettings(true)}>
+          <Button
+            bg={"#33e"}
+            sx={{ cursor: "pointer" }}
+            onClick={() => setShowShareSettings(true)}
+          >
             Share Screen
           </Button>
           <br />
-          <Button bg={"#a0c"} onClick={() => setShowViewSettings(true)} mt={30}>
+          <Button
+            bg={"#a0c"}
+            sx={{ cursor: "pointer" }}
+            onClick={() => setShowViewSettings(true)}
+            mt={30}
+          >
             View Screen
           </Button>
         </div>
