@@ -188,14 +188,13 @@ function Watch({ ably }) {
     window.innerHeight,
   ]);
   const [playing, setPlaying] = useState(false);
-  const [watchId, setWatchId] = useState(null);
   const videoElem = useRef(null);
   useEffect(() => {
     let startWatching = async () => {
       if (!ably) {
         return;
       }
-      setWatchId(genRandomID());
+      const watchId = genRandomID();
       const channelID = window.location.pathname.split("/")[2];
       const channel = ably.channels.get(`channel:${channelID}`);
       channel.publish("watch", { watchId: watchId });
